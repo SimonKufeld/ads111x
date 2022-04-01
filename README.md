@@ -1,4 +1,4 @@
-### Library to control an E-Paper [Waveshare 1.54 inch V2](https://www.waveshare.com/wiki/1.54inch_e-Paper_Module)  through the ESP-IDF build pipeline
+### Library to control an external ADC breakout board [i.e. Adafruit](https://cdn-learn.adafruit.com/downloads/pdf/adafruit-4-channel-adc-breakouts.pdf) through the ESP-IDF build pipeline
 This library is based on the work of [Vedat Ozan Oner](https://github.com/ozanoner) in
 [his book Internet-of-Things-with-ESP32](https://github.com/PacktPublishing/Internet-of-Things-with-ESP32).
 It represents a specific restructure of the base repository that is solely aimed to be working with my specific configuration, to be used in one of my larger ESP-32 projects (link will follow).
