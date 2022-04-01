@@ -1,12 +1,12 @@
 {
-  "name": "ePaper",
-  "version": "1.0.0",
-  "description": "e-Paper library for Waveshare 1.54inch V2 for esp-idf build pipeline",
-  "keywords": "epaper, eink, e-ink, e-paper, waveshare",
+  "name": "ADS111X",
+  "version": "1.0.1",
+  "description": "library for external breakout ADC (ADS111X)",
+  "keywords": ", analog digital converter, ads1115, ads1110, adc",
   "repository":
   {
     "type": "git",
-    "url": "https://github.com/SimonKufeld/epaper.git"
+    "url": "https://github.com/SimonKufeld/ads111x.git"
   },
   "authors":
   [
