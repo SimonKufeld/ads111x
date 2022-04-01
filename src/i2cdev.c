@@ -13,8 +13,8 @@
 #include <esp_log.h>
 #include "i2cdev.h"
 
-#define CONFIG_I2CDEV_TIMEOUT=100000
-#define CONFIG_I2C_FREQ_HZ=400000
+#define CONFIG_I2CDEV_TIMEOUT 100000
+#define CONFIG_I2C_FREQ_HZ 400000
 
 static const char *TAG = "I2CDEV";
 
