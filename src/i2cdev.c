@@ -1,9 +1,32 @@
+/*
+ * The MIT License (MIT)
+ *
+ * Copyright (c) 2018 Ruslan V. Uss <unclerus@gmail.com>
+ *
+ * Permission is hereby granted, free of charge, to any person obtaining a copy
+ * of this software and associated documentation files (the "Software"), to deal
+ * in the Software without restriction, including without limitation the rights
+ * to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+ * copies of the Software, and to permit persons to whom the Software is
+ * furnished to do so, subject to the following conditions:
+ * The above copyright notice and this permission notice shall be included in all
+ * copies or substantial portions of the Software.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+ * IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+ * FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+ * AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+ * LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+ * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+ * SOFTWARE.
+ */
+
 /**
  * @file i2cdev.c
  *
  * ESP-IDF I2C master thread-safe functions for communication with I2C slave
  *
- * Copyright (C) 2018 Ruslan V. Uss <https://github.com/UncleRus>
+ * Copyright (c) 2018 Ruslan V. Uss <unclerus@gmail.com>
  *
  * MIT Licensed as described in the file LICENSE
  */
@@ -13,10 +36,7 @@
 #include <esp_log.h>
 #include "i2cdev.h"
 
-#define CONFIG_I2CDEV_TIMEOUT 100000
-#define CONFIG_I2C_FREQ_HZ 400000
-
-static const char *TAG = "I2CDEV";
+static const char *TAG = "i2cdev";
 
 typedef struct {
     SemaphoreHandle_t lock;
@@ -26,14 +46,21 @@ typedef struct {
 
 static i2c_port_state_t states[I2C_NUM_MAX];
 
+#if CONFIG_I2CDEV_NOLOCK
+#define SEMAPHORE_TAKE(port)
+#else
 #define SEMAPHORE_TAKE(port) do { \
-        if (!xSemaphoreTake(states[port].lock, CONFIG_I2CDEV_TIMEOUT / portTICK_RATE_MS)) \
+        if (!xSemaphoreTake(states[port].lock, pdMS_TO_TICKS(CONFIG_I2CDEV_TIMEOUT))) \
         { \
             ESP_LOGE(TAG, "Could not take port mutex %d", port); \
             return ESP_ERR_TIMEOUT; \
         } \
         } while (0)
+#endif
 
+#if CONFIG_I2CDEV_NOLOCK
+#define SEMAPHORE_GIVE(port)
+#else
 #define SEMAPHORE_GIVE(port) do { \
         if (!xSemaphoreGive(states[port].lock)) \
         { \
@@ -41,11 +68,13 @@ static i2c_port_state_t states[I2C_NUM_MAX];
             return ESP_FAIL; \
         } \
         } while (0)
+#endif
 
 esp_err_t i2cdev_init()
 {
     memset(states, 0, sizeof(states));
 
+#if !CONFIG_I2CDEV_NOLOCK
     for (int i = 0; i < I2C_NUM_MAX; i++)
     {
         states[i].lock = xSemaphoreCreateMutex();
@@ -55,6 +84,7 @@ esp_err_t i2cdev_init()
             return ESP_FAIL;
         }
     }
+#endif
 
     return ESP_OK;
 }
@@ -72,7 +102,9 @@ esp_err_t i2cdev_done()
             states[i].installed = false;
             SEMAPHORE_GIVE(i);
         }
+#if !CONFIG_I2CDEV_NOLOCK
         vSemaphoreDelete(states[i].lock);
+#endif
         states[i].lock = NULL;
     }
     return ESP_OK;
@@ -80,6 +112,7 @@ esp_err_t i2cdev_done()
 
 esp_err_t i2c_dev_create_mutex(i2c_dev_t *dev)
 {
+#if !CONFIG_I2CDEV_NOLOCK
     if (!dev) return ESP_ERR_INVALID_ARG;
 
     ESP_LOGV(TAG, "[0x%02x at %d] creating mutex", dev->addr, dev->port);
@@ -90,36 +123,42 @@ esp_err_t i2c_dev_create_mutex(i2c_dev_t *dev)
         ESP_LOGE(TAG, "[0x%02x at %d] Could not create device mutex", dev->addr, dev->port);
         return ESP_FAIL;
     }
+#endif
 
     return ESP_OK;
 }
 
 esp_err_t i2c_dev_delete_mutex(i2c_dev_t *dev)
 {
+#if !CONFIG_I2CDEV_NOLOCK
     if (!dev) return ESP_ERR_INVALID_ARG;
 
     ESP_LOGV(TAG, "[0x%02x at %d] deleting mutex", dev->addr, dev->port);
 
     vSemaphoreDelete(dev->mutex);
+#endif
     return ESP_OK;
 }
 
 esp_err_t i2c_dev_take_mutex(i2c_dev_t *dev)
 {
+#if !CONFIG_I2CDEV_NOLOCK
     if (!dev) return ESP_ERR_INVALID_ARG;
 
     ESP_LOGV(TAG, "[0x%02x at %d] taking mutex", dev->addr, dev->port);
 
-    if (!xSemaphoreTake(dev->mutex, CONFIG_I2CDEV_TIMEOUT / portTICK_RATE_MS))
+    if (!xSemaphoreTake(dev->mutex, pdMS_TO_TICKS(CONFIG_I2CDEV_TIMEOUT)))
     {
         ESP_LOGE(TAG, "[0x%02x at %d] Could not take device mutex", dev->addr, dev->port);
         return ESP_ERR_TIMEOUT;
     }
+#endif
     return ESP_OK;
 }
 
 esp_err_t i2c_dev_give_mutex(i2c_dev_t *dev)
 {
+#if !CONFIG_I2CDEV_NOLOCK
     if (!dev) return ESP_ERR_INVALID_ARG;
 
     ESP_LOGV(TAG, "[0x%02x at %d] giving mutex", dev->addr, dev->port);
@@ -129,6 +168,7 @@ esp_err_t i2c_dev_give_mutex(i2c_dev_t *dev)
         ESP_LOGE(TAG, "[0x%02x at %d] Could not give device mutex", dev->addr, dev->port);
         return ESP_FAIL;
     }
+#endif
     return ESP_OK;
 }
 
@@ -138,7 +178,7 @@ inline static bool cfg_equal(const i2c_config_t *a, const i2c_config_t *b)
         && a->sda_io_num == b->sda_io_num
 #if HELPER_TARGET_IS_ESP32
         && a->master.clk_speed == b->master.clk_speed
-#elif HELPER_TARGET_IS_ESP8266 && HELPER_TARGET_VERSION > HELPER_TARGET_VERSION_ESP8266_V3_2
+#elif HELPER_TARGET_IS_ESP8266
         && a->clk_stretch_tick == b->clk_stretch_tick
 #endif
         && a->scl_pullup_en == b->scl_pullup_en
@@ -167,10 +207,8 @@ static esp_err_t i2c_setup_port(const i2c_dev_t *dev)
             return res;
 #endif
 #if HELPER_TARGET_IS_ESP8266
-#if HELPER_TARGET_VERSION > HELPER_TARGET_VERSION_ESP8266_V3_2
         // Clock Stretch time, depending on CPU frequency
         temp.clk_stretch_tick = dev->timeout_ticks ? dev->timeout_ticks : I2CDEV_MAX_STRETCH_TIME;
-#endif
         if ((res = i2c_driver_install(dev->port, temp.mode)) != ESP_OK)
             return res;
         if ((res = i2c_param_config(dev->port, &temp)) != ESP_OK)
@@ -216,9 +254,9 @@ esp_err_t i2c_dev_read(const i2c_dev_t *dev, const void *out_data, size_t out_si
         i2c_master_read(cmd, in_data, in_size, I2C_MASTER_LAST_NACK);
         i2c_master_stop(cmd);
 
-        res = i2c_master_cmd_begin(dev->port, cmd, CONFIG_I2CDEV_TIMEOUT / portTICK_RATE_MS);
+        res = i2c_master_cmd_begin(dev->port, cmd, pdMS_TO_TICKS(CONFIG_I2CDEV_TIMEOUT));
         if (res != ESP_OK)
-            ESP_LOGE(TAG, "Could not read from device [0x%02x at %d]: %d", dev->addr, dev->port, res);
+            ESP_LOGE(TAG, "Could not read from device [0x%02x at %d]: %d (%s)", dev->addr, dev->port, res, esp_err_to_name(res));
 
         i2c_cmd_link_delete(cmd);
     }
@@ -243,9 +281,9 @@ esp_err_t i2c_dev_write(const i2c_dev_t *dev, const void *out_reg, size_t out_re
             i2c_master_write(cmd, (void *)out_reg, out_reg_size, true);
         i2c_master_write(cmd, (void *)out_data, out_size, true);
         i2c_master_stop(cmd);
-        res = i2c_master_cmd_begin(dev->port, cmd, CONFIG_I2CDEV_TIMEOUT / portTICK_RATE_MS);
+        res = i2c_master_cmd_begin(dev->port, cmd, pdMS_TO_TICKS(CONFIG_I2CDEV_TIMEOUT));
         if (res != ESP_OK)
-            ESP_LOGE(TAG, "Could not write to device [0x%02x at %d]: %d", dev->addr, dev->port, res);
+            ESP_LOGE(TAG, "Could not write to device [0x%02x at %d]: %d (%s)", dev->addr, dev->port, res, esp_err_to_name(res));
         i2c_cmd_link_delete(cmd);
     }
 
